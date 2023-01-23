@@ -5,6 +5,5 @@
     <string name="search_button_display">SEARCH</string>
     <string name="default_title">Default Title</string>
     <string name="download_button_display">DOWNLOAD</string>
-    <string name="video_not_found_text">Could not find video.</string>
     <string name="thumbnail_image_content_description">Thumbnail Image</string>
 </resources>

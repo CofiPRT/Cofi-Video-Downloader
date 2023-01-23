@@ -15,6 +15,7 @@ public abstract class DownloaderFactory {
 
     static {
         resourceMatcher.put(DownloaderFactory::isYoutubeLink, YoutubeDownloader::new);
+        resourceMatcher.put(DownloaderFactory::isRedditLink, RedditDownloader::new);
     }
 
     private DownloaderFactory() { }
@@ -29,5 +30,9 @@ public abstract class DownloaderFactory {
 
     private static boolean isYoutubeLink(String link) {
         return link.contains("youtube.com") || link.contains("youtu.be");
+    }
+
+    private static boolean isRedditLink(String link) {
+        return link.contains("reddit.com") || link.contains("redd.it");
     }
 }

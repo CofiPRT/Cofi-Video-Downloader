@@ -3,6 +3,7 @@ package com.example.cofivideodownloader;
 import android.content.ClipboardManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.media.MediaScannerConnection;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -17,6 +18,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
+import com.arthenica.ffmpegkit.FFmpegKit;
+import com.arthenica.ffmpegkit.FFmpegSession;
+import com.arthenica.ffmpegkit.ReturnCode;
 import com.example.cofivideodownloader.downloaders.Downloader;
 import com.example.cofivideodownloader.downloaders.DownloaderFactory;
 import com.example.cofivideodownloader.downloaders.VideoMetadata;
@@ -24,13 +28,19 @@ import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLException;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Stream;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -58,7 +68,10 @@ public class MainActivity extends AppCompatActivity {
     private ClipboardManager clipboardManager;
     private File ytDlDir;
 
-    private Downloader downloader; // to be set after search
+    // to be set after search
+    private Downloader downloader;
+    private VideoMetadata videoMetadata;
+    private Bitmap thumbnailBitmap;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -158,12 +171,12 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                VideoMetadata metadata = downloader.getVideoMetadata();
-                if (metadata == null)
+                videoMetadata = downloader.getVideoMetadata();
+                if (videoMetadata == null)
                     return;
 
-                String title = metadata.getTitle();
-                String thumbnailUrl = metadata.getThumbnailURL();
+                String title = videoMetadata.getTitle();
+                String thumbnailUrl = videoMetadata.getThumbnailURL();
 
                 setThumbnail(thumbnailUrl);
 
@@ -181,26 +194,18 @@ public class MainActivity extends AppCompatActivity {
                     downloadProgressBar.setVisibility(View.GONE);
                     downloadLayout.setVisibility(View.VISIBLE);
                 });
-
-                return;
             } catch (MalformedURLException e) {
                 logToast(TAG, "Malformed URL", e);
             } finally {
                 uiHandler.post(this::endSearch);
             }
-
-            uiHandler.post(() -> {
-                // error, show as title and reset the thumbnail
-                titleText.setText(getText(R.string.video_not_found_text));
-                thumbnailImage.setImageResource(android.R.drawable.ic_menu_gallery);
-            });
         });
     }
 
     private void setThumbnail(String thumbnailUrl) {
         try (InputStream in = new URL(thumbnailUrl).openStream()) {
-            Bitmap bitmap = BitmapFactory.decodeStream(in);
-            uiHandler.post(() -> thumbnailImage.setImageBitmap(bitmap));
+            thumbnailBitmap = BitmapFactory.decodeStream(in);
+            uiHandler.post(() -> thumbnailImage.setImageBitmap(thumbnailBitmap));
         } catch (IOException e) {
             logToast(TAG, "Failed to download thumbnail", e);
         }
@@ -235,10 +240,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onDownloadButtonClicked() {
-        String filename = new File(
-            ytDlDir, Long.toHexString(System.currentTimeMillis()) + ".mp4" // obtain current timestamp
+        String originalFilenameNoExt = new File(
+            ytDlDir, Long.toHexString(System.currentTimeMillis()) // obtain current timestamp
         ).getAbsolutePath();
+
+        String filenameNoExt = originalFilenameNoExt;
+        String filename = originalFilenameNoExt + ".mp4";
+
+        // if the file already exists, add a suffix to the filename
+        int suffix = 1;
+        while (new File(filename).exists()) {
+            filenameNoExt = originalFilenameNoExt + "_" + suffix;
+            filename = filenameNoExt + ".mp4";
+        }
+
         startDownload();
+
+        String finalFilenameNoExt = filenameNoExt;
+        String finalFilename = filename;
 
         executor.execute(() -> {
             try {
@@ -247,16 +266,94 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                if (downloader.downloadVideo(filename))
-                    showToast("Download complete");
+                if (!downloader.downloadVideo(finalFilename)) {
+                    showToast("Download failed");
+                    return;
+                }
+
+                Log.i(TAG, "Downloaded to " + finalFilename);
+
+                // use ffmpeg to apply metadata (title, thumbnail, date)
+                if (!applyMetadata(finalFilenameNoExt)) {
+                    showToast("Downloaded, but failed to apply metadata");
+                    return;
+                }
+
+                // notify media store
+                MediaScannerConnection.scanFile(this, new String[] {finalFilename}, null, null);
+
+                showToast("Download finished");
             } finally {
                 uiHandler.post(this::endDownload);
             }
         });
     }
 
+    private boolean applyMetadata(String filenameNoExt) {
+        String filename = filenameNoExt + ".mp4";
+        List<String> args = new ArrayList<>(Arrays.asList("-i", filename));
+
+        // save the thumbnail image as a temporary file
+        File thumbnailFile = new File(filenameNoExt + ".png.temp");
+
+        try (FileOutputStream out = new FileOutputStream(thumbnailFile)) {
+            thumbnailBitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+
+            // add the thumbnail to the ffmpeg command
+            args.addAll(Arrays.asList(
+                "-i", thumbnailFile.getAbsolutePath(),
+                "-map", "1", "-map", "0", "-c", "copy", "-disposition:0", "attached_pic"
+            ));
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to save thumbnail", e);
+        }
+
+        String outputFilename = filenameNoExt + "_temp.mp4";
+
+        // add the title and date to the ffmpeg command
+        // escape quotes in the title
+        String title = videoMetadata.getTitle().replace("\"", "\\\"");
+        Stream.of(
+            "title=\"" + title + "\"",
+            "date=now",
+            "creation_time=now"
+        ).forEach(arg -> args.addAll(Arrays.asList("-metadata", arg)));
+        args.addAll(Arrays.asList("-y", outputFilename));
+
+        // join the arguments into a single string
+        FFmpegSession session = FFmpegKit.execute(String.join(" ", args));
+        boolean success = ReturnCode.isSuccess(session.getReturnCode());
+        if (!success)
+            Log.e(TAG, "FFmpeg Error: " + session.getState() + ": " + session.getFailStackTrace());
+
+        // delete the temporary thumbnail file
+        try {
+            Files.delete(thumbnailFile.toPath());
+        } catch (IOException e) {
+            Log.e(TAG, "IO Exception", e);
+        }
+
+        if (success) {
+            // delete the original file, and rename the output file
+            try {
+                File originalFile = new File(filename);
+                Files.delete(originalFile.toPath());
+                Files.move(new File(outputFilename).toPath(), originalFile.toPath());
+            } catch (IOException e) {
+                Log.e(TAG, "IO Exception", e);
+            }
+        }
+
+        return success;
+    }
+
     public void logToast(String tag, String message, Throwable e) {
         Log.e(tag, message, e);
+        showToast(message);
+    }
+
+    public void logToast(String tag, String message, String trace) {
+        Log.e(tag, message + trace);
         showToast(message);
     }
 

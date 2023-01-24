@@ -1,6 +1,8 @@
 package com.example.cofivideodownloader.downloaders;
 
 import com.example.cofivideodownloader.MainActivity;
+import com.example.cofivideodownloader.downloaders.misc.VideoMetadata;
+import com.example.cofivideodownloader.downloaders.misc.VideoType;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLException;
 import com.yausername.youtubedl_android.YoutubeDLRequest;
@@ -23,7 +25,7 @@ public class YoutubeDownloader extends Downloader {
             String title = info.getTitle();
             String thumbnailUrl = info.getThumbnail();
 
-            return new VideoMetadata(title, thumbnailUrl);
+            return new VideoMetadata(VideoType.VIDEO, title, thumbnailUrl);
         } catch (YoutubeDLException e) {
             activity.logToast(TAG, "Video not found", e);
         } catch (InterruptedException e) {

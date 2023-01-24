@@ -23,7 +23,7 @@ import com.arthenica.ffmpegkit.FFmpegSession;
 import com.arthenica.ffmpegkit.ReturnCode;
 import com.example.cofivideodownloader.downloaders.Downloader;
 import com.example.cofivideodownloader.downloaders.DownloaderFactory;
-import com.example.cofivideodownloader.downloaders.VideoMetadata;
+import com.example.cofivideodownloader.downloaders.misc.VideoMetadata;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLException;
 
@@ -245,13 +245,14 @@ public class MainActivity extends AppCompatActivity {
         ).getAbsolutePath();
 
         String filenameNoExt = originalFilenameNoExt;
-        String filename = originalFilenameNoExt + ".mp4";
+        String ext = "." + videoMetadata.getVideoType().getExtension();
+        String filename = originalFilenameNoExt + ext;
 
         // if the file already exists, add a suffix to the filename
         int suffix = 1;
         while (new File(filename).exists()) {
             filenameNoExt = originalFilenameNoExt + "_" + suffix;
-            filename = filenameNoExt + ".mp4";
+            filename = filenameNoExt + ext;
         }
 
         startDownload();
@@ -274,7 +275,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.i(TAG, "Downloaded to " + finalFilename);
 
                 // use ffmpeg to apply metadata (title, thumbnail, date)
-                if (!applyMetadata(finalFilenameNoExt)) {
+                if (!applyMetadata(finalFilenameNoExt, ext)) {
                     showToast("Downloaded, but failed to apply metadata");
                     return;
                 }
@@ -289,8 +290,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private boolean applyMetadata(String filenameNoExt) {
-        String filename = filenameNoExt + ".mp4";
+    private boolean applyMetadata(String filenameNoExt, String ext) {
+        String filename = filenameNoExt + ext;
         List<String> args = new ArrayList<>(Arrays.asList("-i", filename));
 
         // save the thumbnail image as a temporary file
@@ -308,7 +309,7 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "Failed to save thumbnail", e);
         }
 
-        String outputFilename = filenameNoExt + "_temp.mp4";
+        String outputFilename = filenameNoExt + "_temp" + ext;
 
         // add the title and date to the ffmpeg command
         // escape quotes in the title

@@ -1,6 +1,7 @@
 package com.example.cofivideodownloader.downloaders;
 
 import com.example.cofivideodownloader.MainActivity;
+import com.example.cofivideodownloader.downloaders.misc.VideoMetadata;
 
 import java.net.URL;
 

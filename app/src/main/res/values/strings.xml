@@ -6,4 +6,7 @@
     <string name="default_title">Default Title</string>
     <string name="download_button_display">DOWNLOAD</string>
     <string name="thumbnail_image_content_description">Thumbnail Image</string>
+    <string name="conversion_as_mp4_text">As MP4</string>
+    <string name="conversion_as_gif_text">As GIF</string>
+    <string name="conversion_as_mp3_text">As MP3</string>
 </resources>

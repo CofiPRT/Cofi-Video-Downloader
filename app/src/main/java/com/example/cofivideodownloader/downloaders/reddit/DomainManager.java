@@ -2,7 +2,6 @@ package com.example.cofivideodownloader.downloaders.reddit;
 
 import android.util.Log;
 import com.example.cofivideodownloader.MainActivity;
-import com.example.cofivideodownloader.downloaders.misc.VideoType;
 import com.google.gson.JsonObject;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -27,7 +26,7 @@ public abstract class DomainManager {
         this.data = data;
     }
 
-    public abstract VideoType computeVideoType();
+    public abstract DomainManagerMetadata computeMetadataPart();
 
     public abstract boolean downloadVideo(String filename);
 

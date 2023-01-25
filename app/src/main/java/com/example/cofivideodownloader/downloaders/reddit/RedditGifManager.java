@@ -2,9 +2,9 @@ package com.example.cofivideodownloader.downloaders.reddit;
 
 import android.util.Log;
 import com.example.cofivideodownloader.MainActivity;
+import com.example.cofivideodownloader.downloaders.misc.FileType;
 import com.example.cofivideodownloader.downloaders.misc.JsonPathException;
 import com.example.cofivideodownloader.downloaders.misc.JsonUtil;
-import com.example.cofivideodownloader.downloaders.misc.VideoType;
 import com.google.gson.JsonObject;
 
 import java.net.MalformedURLException;
@@ -20,10 +20,10 @@ public class RedditGifManager extends RedditVideoManager {
     }
 
     @Override
-    public VideoType computeVideoType() {
+    public DomainManagerMetadata computeMetadataPart() {
         try {
             // "gif" must exist under "preview.images[0].variants"
-            boolean isGif = JsonUtil.has(data, "preview.images[0].variants.gif");
+            boolean isGif = JsonUtil.hasPath(data, "preview.images[0].variants.gif");
 
             if (!isGif) {
                 activity.showToast("Invalid link (Not a GIF)");
@@ -32,7 +32,11 @@ public class RedditGifManager extends RedditVideoManager {
 
             gifUrl = JsonUtil.getString(data, "url");
 
-            return VideoType.GIF;
+            // if the url ends with ".gifv", replace it with ".gif"
+            if (gifUrl.endsWith(".gifv"))
+                gifUrl = gifUrl.substring(0, gifUrl.length() - 1);
+
+            return new DomainManagerMetadata(FileType.GIF, true, false);
         } catch (JsonPathException e) {
             Log.e(TAG, "Invalid JSON Response", e);
         }

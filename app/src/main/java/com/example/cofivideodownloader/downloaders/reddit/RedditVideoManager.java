@@ -5,9 +5,9 @@ import com.arthenica.ffmpegkit.FFmpegKit;
 import com.arthenica.ffmpegkit.FFmpegSession;
 import com.arthenica.ffmpegkit.ReturnCode;
 import com.example.cofivideodownloader.MainActivity;
+import com.example.cofivideodownloader.downloaders.misc.FileType;
 import com.example.cofivideodownloader.downloaders.misc.JsonPathException;
 import com.example.cofivideodownloader.downloaders.misc.JsonUtil;
-import com.example.cofivideodownloader.downloaders.misc.VideoType;
 import com.google.gson.JsonObject;
 
 import java.io.IOException;
@@ -28,11 +28,11 @@ public class RedditVideoManager extends DomainManager {
     }
 
     @Override
-    public VideoType computeVideoType() {
+    public DomainManagerMetadata computeMetadataPart() {
         try {
             videoUrl = JsonUtil.getString(data, "media.reddit_video.fallback_url");
 
-            return VideoType.VIDEO;
+            return new DomainManagerMetadata(FileType.VIDEO, true, true);
         } catch (JsonPathException e) {
             Log.e(TAG, "Invalid JSON Response", e);
         }

@@ -5,9 +5,9 @@ import com.example.cofivideodownloader.MainActivity;
 import com.example.cofivideodownloader.downloaders.misc.JsonPathException;
 import com.example.cofivideodownloader.downloaders.misc.JsonUtil;
 import com.example.cofivideodownloader.downloaders.misc.VideoMetadata;
-import com.example.cofivideodownloader.downloaders.misc.VideoType;
 import com.example.cofivideodownloader.downloaders.reddit.DomainManager;
 import com.example.cofivideodownloader.downloaders.reddit.DomainManagerFactory;
+import com.example.cofivideodownloader.downloaders.reddit.DomainManagerMetadata;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -95,7 +95,7 @@ public class RedditDownloader extends Downloader {
             JsonObject data = JsonUtil.getObject(json, "[0].data.children[0].data");
 
             String title = JsonUtil.getString(data, "title");
-            String thumbnailUrl = JsonUtil.getString(data, "preview.images[0].source.url");
+            String thumbnailUrl = decodeURL(JsonUtil.getString(data, "preview.images[0].source.url"));
 
             // get the domain manager
             String domain = JsonUtil.getString(data, "domain");
@@ -105,16 +105,23 @@ public class RedditDownloader extends Downloader {
                 return null;
             }
 
-            VideoType videoType = domainManager.computeVideoType();
-            if (videoType == null)
+            DomainManagerMetadata metadata = domainManager.computeMetadataPart();
+            if (metadata == null)
                 return null;
 
-            return new VideoMetadata(videoType, title, thumbnailUrl);
+            return new VideoMetadata(
+                metadata.getFileType(), title, thumbnailUrl, metadata.canConvertVideo(), metadata.canConvertToAudio()
+            );
         } catch (JsonPathException e) {
             activity.logToast(TAG, "Invalid JSON Response", e);
         }
 
         return null;
+    }
+
+    private String decodeURL(String url) {
+        // decode &amp; to &
+        return url.replace("&amp;", "&");
     }
 
 }

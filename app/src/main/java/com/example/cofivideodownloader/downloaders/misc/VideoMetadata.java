@@ -2,18 +2,24 @@ package com.example.cofivideodownloader.downloaders.misc;
 
 public class VideoMetadata {
 
-    private final VideoType videoType;
+    private final FileType fileType;
+    private final boolean canConvertVideo;
+    private final boolean canConvertToAudio;
     private final String title;
     private final String thumbnailURL;
 
-    public VideoMetadata(VideoType videoType, String title, String thumbnailURL) {
-        this.videoType = videoType;
+    public VideoMetadata(
+        FileType fileType, String title, String thumbnailURL, boolean canConvertVideo, boolean canConvertToAudio
+    ) {
+        this.fileType = fileType;
         this.title = title;
         this.thumbnailURL = thumbnailURL;
+        this.canConvertVideo = canConvertVideo;
+        this.canConvertToAudio = canConvertToAudio;
     }
 
-    public VideoType getVideoType() {
-        return videoType;
+    public FileType getFileType() {
+        return fileType;
     }
 
     public String getTitle() {
@@ -22,6 +28,14 @@ public class VideoMetadata {
 
     public String getThumbnailURL() {
         return thumbnailURL;
+    }
+
+    public boolean canConvertVideo() {
+        return canConvertVideo;
+    }
+
+    public boolean canConvertToAudio() {
+        return canConvertToAudio;
     }
 
 }

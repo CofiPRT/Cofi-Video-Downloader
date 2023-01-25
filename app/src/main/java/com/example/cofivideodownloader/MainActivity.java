@@ -17,12 +17,11 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.SwitchCompat;
 import androidx.constraintlayout.widget.ConstraintLayout;
-import com.arthenica.ffmpegkit.FFmpegKit;
-import com.arthenica.ffmpegkit.FFmpegSession;
-import com.arthenica.ffmpegkit.ReturnCode;
 import com.example.cofivideodownloader.downloaders.Downloader;
 import com.example.cofivideodownloader.downloaders.DownloaderFactory;
+import com.example.cofivideodownloader.downloaders.misc.FileType;
 import com.example.cofivideodownloader.downloaders.misc.VideoMetadata;
 import com.yausername.youtubedl_android.YoutubeDL;
 import com.yausername.youtubedl_android.YoutubeDLException;
@@ -60,6 +59,10 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar downloadProgressBar;
     private TextView downloadProgressText;
 
+    private ConstraintLayout conversionLayout;
+    private SwitchCompat conversionVideoButton;
+    private SwitchCompat conversionAudioButton;
+
     // multi-threading
     private ExecutorService executor;
     private Handler uiHandler;
@@ -93,6 +96,10 @@ public class MainActivity extends AppCompatActivity {
         downloadProgressBar = findViewById(R.id.download_progress_bar);
         downloadProgressText = findViewById(R.id.download_progress_text);
 
+        conversionLayout = findViewById(R.id.conversion_layout);
+        conversionVideoButton = findViewById(R.id.conversion_video_button);
+        conversionAudioButton = findViewById(R.id.conversion_audio_button);
+
         executor = Executors.newSingleThreadExecutor();
         uiHandler = new Handler(Looper.getMainLooper());
 
@@ -115,6 +122,19 @@ public class MainActivity extends AppCompatActivity {
         clipboardButton.setOnClickListener(v -> onClipboardButtonClicked());
         searchButton.setOnClickListener(v -> onSearchButtonClicked());
         downloadButton.setOnClickListener(v -> onDownloadButtonClicked());
+
+        // set switch listeners
+        conversionVideoButton.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                conversionAudioButton.setChecked(false);
+            }
+        });
+
+        conversionAudioButton.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (isChecked) {
+                conversionVideoButton.setChecked(false);
+            }
+        });
     }
 
     private void enableButton(Button button) {
@@ -193,6 +213,9 @@ public class MainActivity extends AppCompatActivity {
                     enableButton(downloadButton);
                     downloadProgressBar.setVisibility(View.GONE);
                     downloadLayout.setVisibility(View.VISIBLE);
+
+                    // enable conversion layout
+                    enableConversionLayout(true);
                 });
             } catch (MalformedURLException e) {
                 logToast(TAG, "Malformed URL", e);
@@ -202,12 +225,39 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void enableConversionLayout(boolean reset) {
+        if (videoMetadata.canConvertVideo()) {
+            FileType targetType = videoMetadata.getFileType() == FileType.VIDEO ? FileType.GIF : FileType.VIDEO;
+            conversionVideoButton.setText(String.format("As %s", targetType.getExtensionNoDot().toUpperCase()));
+            conversionVideoButton.setVisibility(View.VISIBLE);
+        } else {
+            conversionVideoButton.setVisibility(View.GONE);
+        }
+
+        if (videoMetadata.canConvertToAudio())
+            conversionAudioButton.setVisibility(View.VISIBLE);
+        else
+            conversionAudioButton.setVisibility(View.GONE);
+
+        if (reset) {
+            conversionVideoButton.setChecked(false);
+            conversionAudioButton.setChecked(false);
+        }
+
+        conversionLayout.setVisibility(View.VISIBLE);
+    }
+
+    private void disableConversionLayout() {
+        conversionLayout.setVisibility(View.GONE);
+    }
+
     private void setThumbnail(String thumbnailUrl) {
         try (InputStream in = new URL(thumbnailUrl).openStream()) {
             thumbnailBitmap = BitmapFactory.decodeStream(in);
             uiHandler.post(() -> thumbnailImage.setImageBitmap(thumbnailBitmap));
         } catch (IOException e) {
             logToast(TAG, "Failed to download thumbnail", e);
+            uiHandler.post(() -> thumbnailImage.setImageResource(android.R.drawable.ic_menu_gallery));
         }
     }
 
@@ -230,6 +280,7 @@ public class MainActivity extends AppCompatActivity {
         downloadProgressBar.setVisibility(View.VISIBLE);
         downloadProgressText.setVisibility(View.VISIBLE);
         updateDownloadProgress(0);
+        disableConversionLayout();
     }
 
     private void endDownload() {
@@ -237,6 +288,7 @@ public class MainActivity extends AppCompatActivity {
         enableButton(downloadButton);
         downloadProgressBar.setVisibility(View.GONE);
         downloadProgressText.setVisibility(View.GONE);
+        enableConversionLayout(false);
     }
 
     public void onDownloadButtonClicked() {
@@ -245,14 +297,14 @@ public class MainActivity extends AppCompatActivity {
         ).getAbsolutePath();
 
         String filenameNoExt = originalFilenameNoExt;
-        String ext = "." + videoMetadata.getVideoType().getExtension();
-        String filename = originalFilenameNoExt + ext;
+        String originalExt = videoMetadata.getFileType().getExtension();
+        String filename = originalFilenameNoExt + originalExt;
 
         // if the file already exists, add a suffix to the filename
         int suffix = 1;
         while (new File(filename).exists()) {
             filenameNoExt = originalFilenameNoExt + "_" + suffix;
-            filename = filenameNoExt + ext;
+            filename = filenameNoExt + originalExt;
         }
 
         startDownload();
@@ -274,20 +326,55 @@ public class MainActivity extends AppCompatActivity {
 
                 Log.i(TAG, "Downloaded to " + finalFilename);
 
-                // use ffmpeg to apply metadata (title, thumbnail, date)
-                if (!applyMetadata(finalFilenameNoExt, ext)) {
-                    showToast("Downloaded, but failed to apply metadata");
-                    return;
+                // convert
+                String ext = originalExt;
+                FileType targetType = null;
+
+                if (conversionVideoButton.isChecked()) {
+                    if (videoMetadata.getFileType() == FileType.VIDEO)
+                        targetType = FileType.GIF;
+                    else
+                        targetType = FileType.VIDEO;
+                } else if (conversionAudioButton.isChecked()) {
+                    targetType = FileType.AUDIO;
                 }
 
-                // notify media store
-                MediaScannerConnection.scanFile(this, new String[] {finalFilename}, null, null);
+                String failureMessage = null;
 
-                showToast("Download finished");
+                if (targetType != null) {
+                    FFmpegConverter converter = FFmpegUtil.getConverter(targetType);
+                    startConversion(targetType);
+
+                    boolean conversionResult = converter.convert(finalFilenameNoExt, originalExt);
+                    if (conversionResult)
+                        ext = targetType.getExtension();
+                    else
+                        failureMessage = "Downloaded, but failed to convert";
+                }
+
+                // use ffmpeg to apply metadata (title, thumbnail, date)
+                if (!applyMetadata(finalFilenameNoExt, ext) && failureMessage == null)
+                    failureMessage = "Downloaded, but failed to apply metadata";
+
+                // notify media store
+                MediaScannerConnection.scanFile(
+                    this, new String[] {finalFilenameNoExt + ext}, null, null
+                );
+
+                if (failureMessage != null)
+                    showToast(failureMessage);
+                else
+                    showToast("Download finished");
             } finally {
                 uiHandler.post(this::endDownload);
             }
         });
+    }
+
+    public void startConversion(FileType targetType) {
+        uiHandler.post(() -> downloadProgressText.setText(
+            String.format("Converting to %s...", targetType.getExtension().toUpperCase())
+        ));
     }
 
     private boolean applyMetadata(String filenameNoExt, String ext) {
@@ -297,16 +384,18 @@ public class MainActivity extends AppCompatActivity {
         // save the thumbnail image as a temporary file
         File thumbnailFile = new File(filenameNoExt + ".png.temp");
 
-        try (FileOutputStream out = new FileOutputStream(thumbnailFile)) {
-            thumbnailBitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+        if (!ext.equals(FileType.GIF.getExtension())) {
+            try (FileOutputStream out = new FileOutputStream(thumbnailFile)) {
+                thumbnailBitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
 
-            // add the thumbnail to the ffmpeg command
-            args.addAll(Arrays.asList(
-                "-i", thumbnailFile.getAbsolutePath(),
-                "-map", "1", "-map", "0", "-c", "copy", "-disposition:0", "attached_pic"
-            ));
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to save thumbnail", e);
+                // add the thumbnail to the ffmpeg command
+                args.addAll(Arrays.asList(
+                    "-i", thumbnailFile.getAbsolutePath(),
+                    "-map", "1", "-map", "0", "-c", "copy", "-disposition:0", "attached_pic"
+                ));
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to save thumbnail", e);
+            }
         }
 
         String outputFilename = filenameNoExt + "_temp" + ext;
@@ -321,32 +410,18 @@ public class MainActivity extends AppCompatActivity {
         ).forEach(arg -> args.addAll(Arrays.asList("-metadata", arg)));
         args.addAll(Arrays.asList("-y", outputFilename));
 
-        // join the arguments into a single string
-        FFmpegSession session = FFmpegKit.execute(String.join(" ", args));
-        boolean success = ReturnCode.isSuccess(session.getReturnCode());
-        if (!success)
-            Log.e(TAG, "FFmpeg Error: " + session.getState() + ": " + session.getFailStackTrace());
+        boolean success = FFmpegUtil.execute(args, filename, outputFilename);
 
         // delete the temporary thumbnail file
         try {
-            Files.delete(thumbnailFile.toPath());
+            Files.deleteIfExists(thumbnailFile.toPath());
         } catch (IOException e) {
             Log.e(TAG, "IO Exception", e);
         }
 
-        if (success) {
-            // delete the original file, and rename the output file
-            try {
-                File originalFile = new File(filename);
-                Files.delete(originalFile.toPath());
-                Files.move(new File(outputFilename).toPath(), originalFile.toPath());
-            } catch (IOException e) {
-                Log.e(TAG, "IO Exception", e);
-            }
-        }
-
         return success;
     }
+
 
     public void logToast(String tag, String message, Throwable e) {
         Log.e(tag, message, e);

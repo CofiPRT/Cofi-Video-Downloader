@@ -2,9 +2,9 @@ package com.example.cofivideodownloader.downloaders.reddit;
 
 import android.util.Log;
 import com.example.cofivideodownloader.MainActivity;
+import com.example.cofivideodownloader.downloaders.misc.FileType;
 import com.example.cofivideodownloader.downloaders.misc.JsonPathException;
 import com.example.cofivideodownloader.downloaders.misc.JsonUtil;
-import com.example.cofivideodownloader.downloaders.misc.VideoType;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -24,7 +24,7 @@ public class GfycatVideoManager extends RedditVideoManager {
     }
 
     @Override
-    public VideoType computeVideoType() {
+    public DomainManagerMetadata computeMetadataPart() {
         String gfycatLink;
 
         // get the gfycat video url
@@ -66,11 +66,13 @@ public class GfycatVideoManager extends RedditVideoManager {
         return null;
     }
 
-    private VideoType parseGfycatResponse(JsonElement response) {
+    private DomainManagerMetadata parseGfycatResponse(JsonElement response) {
         try {
             videoUrl = JsonUtil.getString(response, "gfyItem.mp4Url");
 
-            return VideoType.VIDEO;
+            boolean hasAudio = JsonUtil.getBoolean(response, "gfyItem.hasAudio");
+
+            return new DomainManagerMetadata(FileType.VIDEO, true, hasAudio);
         } catch (JsonPathException e) {
             Log.e(TAG, "Invalid JSON Response", e);
         }

@@ -86,8 +86,16 @@ public class JsonUtil {
         return get(json, path, Function.identity());
     }
 
-    public static boolean has(JsonElement json, String path) throws JsonPathException {
+    public static boolean hasElement(JsonElement json, String path) throws JsonPathException {
         return getElement(json, path) != null;
+    }
+
+    public static boolean hasPath(JsonElement json, String path) {
+        try {
+            return hasElement(json, path);
+        } catch (JsonPathException e) {
+            return false;
+        }
     }
 
     public static JsonElement parseJSON(HttpsURLConnection connection, MainActivity activity) {

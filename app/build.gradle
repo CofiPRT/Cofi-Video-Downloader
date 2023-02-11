@@ -9,8 +9,8 @@ android {
         applicationId "com.example.cofivideodownloader"
         minSdk 30
         targetSdk 32
-        versionCode 1
-        versionName "1.0"
+        versionCode project.versionCode as int
+        versionName project.version
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -23,6 +23,15 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig getSigningConfig()
+            applicationVariants.all { variant ->
+                variant.outputs.all { output ->
+                    def apkName = project.apkName
+                    def prevName = output.outputFileName
+                    def newName = prevName.replace("app", "${apkName}-${variant.versionName}")
+                    output.outputFileName = newName
+                }
+            }
         }
     }
 

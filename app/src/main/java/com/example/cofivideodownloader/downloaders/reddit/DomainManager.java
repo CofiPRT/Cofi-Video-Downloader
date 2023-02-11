@@ -36,8 +36,8 @@ public abstract class DomainManager {
 
         try (OutputStream outputStream = Files.newOutputStream(Paths.get(destinationFilename))) {
             // establish the connection
+            Log.i(TAG, "Downloading file: " + fileURL);
             connection = (HttpsURLConnection) fileURL.openConnection();
-
             int responseCode = connection.getResponseCode();
             Log.i(TAG, "Response code: " + responseCode);
 
@@ -48,13 +48,13 @@ public abstract class DomainManager {
 
             InputStream inputStream = connection.getInputStream();
 
-            byte[] data = new byte[BUFFER_SIZE];
+            byte[] downloadData = new byte[BUFFER_SIZE];
             long total = 0;
             int count;
-            while ((count = inputStream.read(data)) != -1) {
+            while ((count = inputStream.read(downloadData)) != -1) {
                 total += count;
                 activity.updateDownloadProgress(startProgress + (int) (total * ratio * 100 / fileSize));
-                outputStream.write(data, 0, count);
+                outputStream.write(downloadData, 0, count);
             }
 
             return true;

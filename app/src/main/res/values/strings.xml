@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Cofi-Video-Downloader</string>
+    <string name="app_name">Cofivid</string>
     <string name="link_text_box_hint">Enter Link</string>
     <string name="clipboard_button_display">CLIPBOARD</string>
     <string name="search_button_display">SEARCH</string>

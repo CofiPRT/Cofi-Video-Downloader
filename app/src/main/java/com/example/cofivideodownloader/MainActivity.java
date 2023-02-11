@@ -252,22 +252,38 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setThumbnail(String thumbnailUrl) {
+        if (thumbnailUrl == null) {
+            showToast("No thumbnail available.");
+            setDefaultThumbnail();
+
+            return;
+        }
+
+        Log.i(TAG, "Downloading thumbnail from: " + thumbnailUrl);
         try (InputStream in = new URL(thumbnailUrl).openStream()) {
             thumbnailBitmap = BitmapFactory.decodeStream(in);
             uiHandler.post(() -> thumbnailImage.setImageBitmap(thumbnailBitmap));
         } catch (IOException e) {
             logToast(TAG, "Failed to download thumbnail", e);
-            uiHandler.post(() -> thumbnailImage.setImageResource(android.R.drawable.ic_menu_gallery));
+            setDefaultThumbnail();
         }
+        Log.i(TAG, "Downloaded thumbnail.");
+    }
+
+    private void setDefaultThumbnail() {
+        uiHandler.post(() -> thumbnailImage.setImageResource(android.R.drawable.ic_menu_gallery));
     }
 
     public void updateDownloadProgress(int progress) {
         uiHandler.post(() -> {
             int clampedProgress = Math.max(0, Math.min(100, progress));
 
+            boolean isIndeterminate = clampedProgress == 0;
+
+            downloadProgressBar.setIndeterminate(isIndeterminate);
             downloadProgressBar.setProgress(clampedProgress);
 
-            String text = clampedProgress == 0
+            String text = isIndeterminate
                 ? "Starting download..."
                 : String.format(Locale.ENGLISH, "%d%%", clampedProgress);
             downloadProgressText.setText(text);
@@ -343,7 +359,7 @@ public class MainActivity extends AppCompatActivity {
 
                 if (targetType != null) {
                     FFmpegConverter converter = FFmpegUtil.getConverter(targetType);
-                    startConversion(targetType);
+                    indeterminateProcess(String.format("Converting to %s...", targetType.getExtension().toUpperCase()));
 
                     boolean conversionResult = converter.convert(finalFilenameNoExt, originalExt);
                     if (conversionResult)
@@ -351,6 +367,8 @@ public class MainActivity extends AppCompatActivity {
                     else
                         failureMessage = "Downloaded, but failed to convert";
                 }
+
+                indeterminateProcess("Applying metadata...");
 
                 // use ffmpeg to apply metadata (title, thumbnail, date)
                 if (!applyMetadata(finalFilenameNoExt, ext) && failureMessage == null)
@@ -371,10 +389,11 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    public void startConversion(FileType targetType) {
-        uiHandler.post(() -> downloadProgressText.setText(
-            String.format("Converting to %s...", targetType.getExtension().toUpperCase())
-        ));
+    private void indeterminateProcess(String text) {
+        uiHandler.post(() -> {
+            downloadProgressText.setText(text);
+            downloadProgressBar.setIndeterminate(true);
+        });
     }
 
     private boolean applyMetadata(String filenameNoExt, String ext) {
@@ -382,9 +401,11 @@ public class MainActivity extends AppCompatActivity {
         List<String> args = new ArrayList<>(Arrays.asList("-i", filename));
 
         // save the thumbnail image as a temporary file
-        File thumbnailFile = new File(filenameNoExt + ".png.temp");
+        File thumbnailFile = videoMetadata.getThumbnailURL() != null
+            ? new File(filenameNoExt + ".png.temp")
+            : null;
 
-        if (!ext.equals(FileType.GIF.getExtension())) {
+        if (thumbnailFile != null && !ext.equals(FileType.GIF.getExtension())) {
             try (FileOutputStream out = new FileOutputStream(thumbnailFile)) {
                 thumbnailBitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
 
@@ -413,10 +434,12 @@ public class MainActivity extends AppCompatActivity {
         boolean success = FFmpegUtil.execute(args, filename, outputFilename);
 
         // delete the temporary thumbnail file
-        try {
-            Files.deleteIfExists(thumbnailFile.toPath());
-        } catch (IOException e) {
-            Log.e(TAG, "IO Exception", e);
+        if (thumbnailFile != null) {
+            try {
+                Files.deleteIfExists(thumbnailFile.toPath());
+            } catch (IOException e) {
+                Log.e(TAG, "IO Exception", e);
+            }
         }
 
         return success;

@@ -61,8 +61,8 @@ public class RedditDownloader extends Downloader {
             URL requestURL = new URL(newLink);
 
             // establish the connection
+            Log.i(TAG, "Sending GET request: " + requestURL);
             connection = (HttpsURLConnection) requestURL.openConnection();
-
             int responseCode = connection.getResponseCode();
             Log.i(TAG, "Response code: " + responseCode);
 
@@ -94,8 +94,15 @@ public class RedditDownloader extends Downloader {
         try {
             JsonObject data = JsonUtil.getObject(json, "[0].data.children[0].data");
 
+            if (isRemoved(data)) {
+                activity.showToast("This post has been removed");
+                return null;
+            }
+
             String title = JsonUtil.getString(data, "title");
-            String thumbnailUrl = decodeURL(JsonUtil.getString(data, "preview.images[0].source.url"));
+            String thumbnailUrl = retrieveThumbnailUrl(data);
+
+            data = resolveCrossposts(data);
 
             // get the domain manager
             String domain = JsonUtil.getString(data, "domain");
@@ -119,9 +126,36 @@ public class RedditDownloader extends Downloader {
         return null;
     }
 
+    private boolean isRemoved(JsonObject data) {
+        try {
+            return JsonUtil.getString(data, "removed_by_category") != null;
+        } catch (JsonPathException e) {
+            return false;
+        }
+    }
+
+    private String retrieveThumbnailUrl(JsonObject data) throws JsonPathException {
+        try {
+            return decodeURL(JsonUtil.getString(data, "preview.images[0].source.url"));
+        } catch (JsonPathException e) {
+            return null;
+        }
+    }
+
     private String decodeURL(String url) {
         // decode &amp; to &
         return url.replace("&amp;", "&");
+    }
+
+    private JsonObject resolveCrossposts(JsonObject data) throws JsonPathException {
+        if (!JsonUtil.hasPath(data, "crosspost_parent_list[0]"))
+            return data;
+
+        JsonObject crosspost = JsonUtil.getObject(data, "crosspost_parent_list[0]");
+        if (crosspost == null)
+            return data;
+
+        return crosspost;
     }
 
 }

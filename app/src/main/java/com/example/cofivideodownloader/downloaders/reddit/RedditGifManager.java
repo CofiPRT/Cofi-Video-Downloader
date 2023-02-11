@@ -22,19 +22,19 @@ public class RedditGifManager extends RedditVideoManager {
     @Override
     public DomainManagerMetadata computeMetadataPart() {
         try {
-            // "gif" must exist under "preview.images[0].variants"
-            boolean isGif = JsonUtil.hasPath(data, "preview.images[0].variants.gif");
+            String url = JsonUtil.getString(data, "url");
 
-            if (!isGif) {
+            // if the url ends with ".gifv", replace it with ".gif"
+            if (url.endsWith(".gifv"))
+                url = url.substring(0, url.length() - 1);
+
+            // if the url doesn't end with ".gif", it's not a valid link
+            if (!url.endsWith(".gif")) {
                 activity.showToast("Invalid link (Not a GIF)");
                 return null;
             }
 
-            gifUrl = JsonUtil.getString(data, "url");
-
-            // if the url ends with ".gifv", replace it with ".gif"
-            if (gifUrl.endsWith(".gifv"))
-                gifUrl = gifUrl.substring(0, gifUrl.length() - 1);
+            gifUrl = url;
 
             return new DomainManagerMetadata(FileType.GIF, true, false);
         } catch (JsonPathException e) {
